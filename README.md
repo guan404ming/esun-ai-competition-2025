@@ -20,23 +20,29 @@
 
 ## 使用方式
 1. **安裝套件**
-   - 請先安裝 Python 3.8或以上，及下列套件：
-     - pandas==2.0.0
-     - scikit-learn==1.3.2
-   - 安裝指令如下：
-     ```powershell
-     pip install pandas==2.0.0 scikit-learn==1.3.2
+   - 請先安裝 Python 3.12或以上
+   - 本專案使用 `uv` 進行套件管理，安裝指令如下：
+     ```bash
+     uv sync
+     ```
+   - 啟用虛擬環境：
+     ```bash
+     source .venv/bin/activate
      ```
 2. **準備資料**
-   - 請將以下三個CSV檔案放在 `dir_path` 指定的資料夾（預設為 `../preliminary_data/`）：
+   - 執行以下指令自動下載並解壓縮資料集：
+     ```bash
+     bash get_dataset.sh
+     ```
+   - 資料將會自動放置在 `data/` 資料夾中，包含以下三個CSV檔案：
      - acct_transaction.csv
      - acct_alert.csv
      - acct_predict.csv
-   - 若資料路徑不同，請修改程式中的 `dir_path` 變數。
 3. **執行程式**
-   ```powershell
-   python TransactionAlertClassifier.py
-   ```
+   - 執行預測程式：
+     ```bash
+     python TransactionAlertClassifier.py
+     ```
    - 預測結果將會儲存於 result.csv。
 
 ## TransactionAlertClassifier.py

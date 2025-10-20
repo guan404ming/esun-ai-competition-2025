@@ -98,7 +98,7 @@ def OutputCSV(path, df_test, X_test, y_pred):
     print(f"(Finish) Output saved to {path}")
 
 if __name__ == "__main__":
-    dir_path = "../preliminary_data/"
+    dir_path = "data/"
     df_txn, df_alert, df_test = LoadCSV(dir_path)
     df_X = PreProcessing(df_txn)
     X_train, X_test, y_train = TrainTestSplit(df_X, df_alert, df_test)
