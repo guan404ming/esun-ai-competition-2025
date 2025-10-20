@@ -12,8 +12,10 @@ import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import f1_score, precision_score, recall_score
 from imblearn.over_sampling import SMOTE
 from tqdm import tqdm
+from datetime import datetime
 
 
 def LoadCSV(dir_path):
@@ -48,19 +50,31 @@ def EnhancedFeatureEngineering(df):
     features_list = []
 
     # 1. 發送交易統計
-    send_stats = df.groupby("from_acct").agg({
-        "txn_amt": ["sum", "max", "min", "mean", "std", "count"]
-    })
-    send_stats.columns = ["total_send_amt", "max_send_amt", "min_send_amt",
-                          "avg_send_amt", "std_send_amt", "send_count"]
+    send_stats = df.groupby("from_acct").agg(
+        {"txn_amt": ["sum", "max", "min", "mean", "std", "count"]}
+    )
+    send_stats.columns = [
+        "total_send_amt",
+        "max_send_amt",
+        "min_send_amt",
+        "avg_send_amt",
+        "std_send_amt",
+        "send_count",
+    ]
     send_stats = send_stats.reset_index().rename(columns={"from_acct": "acct"})
 
     # 2. 接收交易統計
-    recv_stats = df.groupby("to_acct").agg({
-        "txn_amt": ["sum", "max", "min", "mean", "std", "count"]
-    })
-    recv_stats.columns = ["total_recv_amt", "max_recv_amt", "min_recv_amt",
-                          "avg_recv_amt", "std_recv_amt", "recv_count"]
+    recv_stats = df.groupby("to_acct").agg(
+        {"txn_amt": ["sum", "max", "min", "mean", "std", "count"]}
+    )
+    recv_stats.columns = [
+        "total_recv_amt",
+        "max_recv_amt",
+        "min_recv_amt",
+        "avg_recv_amt",
+        "std_recv_amt",
+        "recv_count",
+    ]
     recv_stats = recv_stats.reset_index().rename(columns={"to_acct": "acct"})
 
     # 3. 合併發送和接收統計
@@ -69,11 +83,17 @@ def EnhancedFeatureEngineering(df):
     # 4. 計算衍生特徵
     df_result["total_txn_count"] = df_result["send_count"] + df_result["recv_count"]
     df_result["net_flow"] = df_result["total_recv_amt"] - df_result["total_send_amt"]
-    df_result["send_recv_ratio"] = df_result["total_send_amt"] / (df_result["total_recv_amt"] + 1)
-    df_result["avg_txn_amt"] = (df_result["total_send_amt"] + df_result["total_recv_amt"]) / (df_result["total_txn_count"] + 1)
+    df_result["send_recv_ratio"] = df_result["total_send_amt"] / (
+        df_result["total_recv_amt"] + 1
+    )
+    df_result["avg_txn_amt"] = (
+        df_result["total_send_amt"] + df_result["total_recv_amt"]
+    ) / (df_result["total_txn_count"] + 1)
 
     # 5. 交易波動性特徵
-    df_result["txn_volatility"] = (df_result["std_send_amt"] + df_result["std_recv_amt"]) / 2
+    df_result["txn_volatility"] = (
+        df_result["std_send_amt"] + df_result["std_recv_amt"]
+    ) / 2
 
     # 6. 獲取帳戶類型 (is_esun)
     df_from = df[["from_acct", "from_acct_type"]].rename(
@@ -94,7 +114,9 @@ def EnhancedFeatureEngineering(df):
     # 8. 處理缺失值
     df_result = df_result.fillna(0)
 
-    print(f"(Finish) Enhanced Feature Engineering. Total features: {len(df_result.columns) - 1}")
+    print(
+        f"(Finish) Enhanced Feature Engineering. Total features: {len(df_result.columns) - 1}"
+    )
     return df_result
 
 
@@ -102,6 +124,7 @@ class TransactionDataset(Dataset):
     """
     PyTorch Dataset 類別，用於處理交易資料
     """
+
     def __init__(self, X, y):
         self.X = torch.FloatTensor(X)
         self.y = torch.FloatTensor(y)
@@ -123,6 +146,7 @@ class AlertClassifierNet(nn.Module):
     - ReLU 激活函數
     - 輸出層使用 Sigmoid
     """
+
     def __init__(self, input_dim, hidden_dims=[256, 128, 64], dropout_rate=0.3):
         super(AlertClassifierNet, self).__init__()
 
@@ -147,7 +171,9 @@ class AlertClassifierNet(nn.Module):
         return self.network(x).squeeze()
 
 
-def TrainTestSplit(df, df_alert, df_test, val_size=0.2, use_smote=True, random_state=42):
+def TrainTestSplit(
+    df, df_alert, df_test, val_size=0.2, use_smote=True, random_state=42
+):
     """
     切分訓練集、驗證集及測試集
     Args:
@@ -183,8 +209,12 @@ def TrainTestSplit(df, df_alert, df_test, val_size=0.2, use_smote=True, random_s
 
     # 切分訓練集和驗證集
     X_train, X_val, y_train, y_val, train_idx, val_idx = train_test_split(
-        X_train_features, y_train_values, np.arange(len(y_train_values)),
-        test_size=val_size, random_state=random_state, stratify=y_train_values
+        X_train_features,
+        y_train_values,
+        np.arange(len(y_train_values)),
+        test_size=val_size,
+        random_state=random_state,
+        stratify=y_train_values,
     )
 
     # 特徵標準化
@@ -205,13 +235,30 @@ def TrainTestSplit(df, df_alert, df_test, val_size=0.2, use_smote=True, random_s
     print(f"  Validation samples: {len(X_val_scaled)}")
     print(f"  Test samples: {len(X_test_scaled)}")
 
-    return X_train_scaled, X_val_scaled, X_test_scaled, y_train, y_val, test_accts, scaler
+    return (
+        X_train_scaled,
+        X_val_scaled,
+        X_test_scaled,
+        y_train,
+        y_val,
+        test_accts,
+        scaler,
+    )
 
 
-def train_model(model, train_loader, val_loader, criterion, optimizer,
-                num_epochs=50, device='cpu', patience=10):
+def train_model(
+    model,
+    train_loader,
+    val_loader,
+    criterion,
+    optimizer,
+    num_epochs=50,
+    device="cpu",
+    patience=10,
+    use_amp=True,
+):
     """
-    訓練深度學習模型
+    訓練深度學習模型，使用 F1 score 作為評估指標
     Args:
         model: PyTorch 模型
         train_loader: 訓練資料 DataLoader
@@ -221,82 +268,124 @@ def train_model(model, train_loader, val_loader, criterion, optimizer,
         num_epochs: 訓練輪數
         device: 運算裝置 (cpu/cuda)
         patience: Early stopping 的耐心值
+        use_amp: 是否使用混合精度訓練 (僅 CUDA)
 
     Returns:
         訓練好的模型
     """
     model.to(device)
-    best_val_loss = float('inf')
+    best_val_f1 = 0.0
     patience_counter = 0
+
+    # 混合精度訓練 (僅 CUDA)
+    use_amp = use_amp and device.type == "cuda"
+    scaler = torch.cuda.amp.GradScaler() if use_amp else None
+
+    if use_amp:
+        print("Using Automatic Mixed Precision (AMP) for faster training")
 
     for epoch in range(num_epochs):
         # 訓練階段
         model.train()
         train_loss = 0.0
-        train_correct = 0
-        train_total = 0
+        train_preds = []
+        train_labels = []
 
-        for X_batch, y_batch in tqdm(train_loader, desc=f"Epoch {epoch+1}/{num_epochs}"):
-            X_batch, y_batch = X_batch.to(device), y_batch.to(device)
+        for X_batch, y_batch in tqdm(
+            train_loader, desc=f"Epoch {epoch + 1}/{num_epochs}"
+        ):
+            X_batch = X_batch.to(device, non_blocking=True)
+            y_batch = y_batch.to(device, non_blocking=True)
 
-            optimizer.zero_grad()
-            outputs = model(X_batch)
-            loss = criterion(outputs, y_batch)
-            loss.backward()
-            optimizer.step()
+            optimizer.zero_grad(set_to_none=True)
+
+            # 混合精度訓練
+            if use_amp:
+                with torch.cuda.amp.autocast():
+                    outputs = model(X_batch)
+                    loss = criterion(outputs, y_batch)
+                scaler.scale(loss).backward()
+                scaler.step(optimizer)
+                scaler.update()
+            else:
+                outputs = model(X_batch)
+                loss = criterion(outputs, y_batch)
+                loss.backward()
+                optimizer.step()
 
             train_loss += loss.item()
             predictions = (outputs > 0.5).float()
-            train_correct += (predictions == y_batch).sum().item()
-            train_total += y_batch.size(0)
+            train_preds.extend(predictions.detach().cpu().numpy())
+            train_labels.extend(y_batch.cpu().numpy())
 
         # 驗證階段
         model.eval()
         val_loss = 0.0
-        val_correct = 0
-        val_total = 0
+        val_preds = []
+        val_labels = []
 
         with torch.no_grad():
             for X_batch, y_batch in val_loader:
-                X_batch, y_batch = X_batch.to(device), y_batch.to(device)
-                outputs = model(X_batch)
-                loss = criterion(outputs, y_batch)
+                X_batch = X_batch.to(device, non_blocking=True)
+                y_batch = y_batch.to(device, non_blocking=True)
+
+                if use_amp:
+                    with torch.cuda.amp.autocast():
+                        outputs = model(X_batch)
+                        loss = criterion(outputs, y_batch)
+                else:
+                    outputs = model(X_batch)
+                    loss = criterion(outputs, y_batch)
 
                 val_loss += loss.item()
                 predictions = (outputs > 0.5).float()
-                val_correct += (predictions == y_batch).sum().item()
-                val_total += y_batch.size(0)
+                val_preds.extend(predictions.cpu().numpy())
+                val_labels.extend(y_batch.cpu().numpy())
 
-        # 計算平均損失和準確率
+        # 計算評估指標
         avg_train_loss = train_loss / len(train_loader)
         avg_val_loss = val_loss / len(val_loader)
-        train_acc = train_correct / train_total
-        val_acc = val_correct / val_total
 
-        print(f"Epoch {epoch+1}/{num_epochs}:")
-        print(f"  Train Loss: {avg_train_loss:.4f}, Train Acc: {train_acc:.4f}")
-        print(f"  Val Loss: {avg_val_loss:.4f}, Val Acc: {val_acc:.4f}")
+        train_f1 = f1_score(train_labels, train_preds, zero_division=0)
+        train_precision = precision_score(train_labels, train_preds, zero_division=0)
+        train_recall = recall_score(train_labels, train_preds, zero_division=0)
 
-        # Early stopping
-        if avg_val_loss < best_val_loss:
-            best_val_loss = avg_val_loss
+        val_f1 = f1_score(val_labels, val_preds, zero_division=0)
+        val_precision = precision_score(val_labels, val_preds, zero_division=0)
+        val_recall = recall_score(val_labels, val_preds, zero_division=0)
+
+        print(f"Epoch {epoch + 1}/{num_epochs}:")
+        print(
+            f"  Train Loss: {avg_train_loss:.4f}, F1: {train_f1:.4f}, Prec: {train_precision:.4f}, Rec: {train_recall:.4f}"
+        )
+        print(
+            f"  Val Loss: {avg_val_loss:.4f}, F1: {val_f1:.4f}, Prec: {val_precision:.4f}, Rec: {val_recall:.4f}"
+        )
+
+        # Early stopping based on F1 score
+        if val_f1 > best_val_f1:
+            best_val_f1 = val_f1
             patience_counter = 0
-            # 保存最佳模型
-            torch.save(model.state_dict(), 'best_model.pth')
-            print(f"  -> Best model saved!")
+            # 保存最佳模型到 results 資料夾
+            model_path = (
+                f"results/best_model_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pth"
+            )
+            torch.save(model.state_dict(), model_path)
+            print(f"  -> Best model saved to {model_path}! (F1: {val_f1:.4f})")
         else:
             patience_counter += 1
             if patience_counter >= patience:
-                print(f"Early stopping triggered after {epoch+1} epochs")
+                print(f"Early stopping triggered after {epoch + 1} epochs")
+                print(f"Best validation F1 score: {best_val_f1:.4f}")
                 break
 
     # 載入最佳模型
-    model.load_state_dict(torch.load('best_model.pth'))
+    model.load_state_dict(torch.load(model_path))
     print("(Finish) Model Training")
     return model
 
 
-def predict(model, X_test, device='cpu', batch_size=256):
+def predict(model, X_test, device="cpu", batch_size=256):
     """
     使用訓練好的模型進行預測
     """
@@ -331,23 +420,40 @@ def OutputCSV(path, df_test, test_accts, y_pred):
 
 
 if __name__ == "__main__":
+    # 建立 results 資料夾
+    os.makedirs("results", exist_ok=True)
+
     # 設定隨機種子以確保可重現性
     RANDOM_SEED = 42
     torch.manual_seed(RANDOM_SEED)
     np.random.seed(RANDOM_SEED)
 
     # 檢查是否有 GPU 可用
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
-    # 超參數設定
-    BATCH_SIZE = 256
+    if device.type == "cuda":
+        print(f"GPU: {torch.cuda.get_device_name(0)}")
+        print(
+            f"GPU Memory: {torch.cuda.get_device_properties(0).total_memory / 1e9:.2f} GB"
+        )
+
+    # 超參數設定 - 優化 GPU 使用率
+    # GPU 優化策略:
+    # 1. 增加 BATCH_SIZE (256->1024) - 提高 GPU 並行計算量
+    # 2. 增加模型容量 HIDDEN_DIMS ([256,128,64]->[512,256,128]) - 增加計算密度
+    # 3. 啟用 AMP (混合精度訓練) - 減少記憶體使用，提高吞吐量
+    # 4. pin_memory + num_workers - 加速 CPU->GPU 資料傳輸
+    # 5. non_blocking transfers - CPU/GPU 非同步操作
+    BATCH_SIZE = 1024  # 增加批次大小以提高 GPU 利用率
     LEARNING_RATE = 0.001
     NUM_EPOCHS = 100
-    HIDDEN_DIMS = [256, 128, 64]
+    HIDDEN_DIMS = [512, 256, 128]  # 增加模型容量
     DROPOUT_RATE = 0.3
     PATIENCE = 15
     USE_SMOTE = True
+    USE_AMP = True  # 啟用混合精度訓練 (Float16/32 混合)
+    NUM_WORKERS = 4  # DataLoader 多線程 (根據 CPU 核心數調整)
 
     # 1. 載入資料
     dir_path = "data/"
@@ -361,16 +467,32 @@ if __name__ == "__main__":
         df_X, df_alert, df_test, use_smote=USE_SMOTE, random_state=RANDOM_SEED
     )
 
-    # 4. 建立 DataLoader
+    # 4. 建立 DataLoader - 優化 GPU 傳輸
     train_dataset = TransactionDataset(X_train, y_train)
     val_dataset = TransactionDataset(X_val, y_val)
 
-    train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True)
-    val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False)
+    train_loader = DataLoader(
+        train_dataset,
+        batch_size=BATCH_SIZE,
+        shuffle=True,
+        num_workers=NUM_WORKERS,
+        pin_memory=True if device.type == "cuda" else False,
+        persistent_workers=True if NUM_WORKERS > 0 else False,
+    )
+    val_loader = DataLoader(
+        val_dataset,
+        batch_size=BATCH_SIZE,
+        shuffle=False,
+        num_workers=NUM_WORKERS,
+        pin_memory=True if device.type == "cuda" else False,
+        persistent_workers=True if NUM_WORKERS > 0 else False,
+    )
 
     # 5. 建立模型
     input_dim = X_train.shape[1]
-    model = AlertClassifierNet(input_dim, hidden_dims=HIDDEN_DIMS, dropout_rate=DROPOUT_RATE)
+    model = AlertClassifierNet(
+        input_dim, hidden_dims=HIDDEN_DIMS, dropout_rate=DROPOUT_RATE
+    )
 
     # 6. 設定損失函數和優化器
     # 使用加權損失函數處理類別不平衡
@@ -380,13 +502,25 @@ if __name__ == "__main__":
 
     # 7. 訓練模型
     model = train_model(
-        model, train_loader, val_loader, criterion, optimizer,
-        num_epochs=NUM_EPOCHS, device=device, patience=PATIENCE
+        model,
+        train_loader,
+        val_loader,
+        criterion,
+        optimizer,
+        num_epochs=NUM_EPOCHS,
+        device=device,
+        patience=PATIENCE,
+        use_amp=USE_AMP,
     )
 
     # 8. 預測測試集
     y_pred = predict(model, X_test, device=device)
 
-    # 9. 輸出結果
-    out_path = "result_dl.csv"
+    # 9. 輸出結果到 results 資料夾
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    out_path = f"results/{timestamp}_prediction_dl.csv"
     OutputCSV(out_path, df_test, test_accts, y_pred)
+
+    print("\n=== Training Complete ===")
+    print(f"Model saved to: results/best_model_{timestamp}.pth")
+    print(f"Predictions saved to: {out_path}")
