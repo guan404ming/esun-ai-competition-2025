@@ -144,7 +144,7 @@ class AlertClassifierNet(nn.Module):
     - 3個隱藏層 (256 -> 128 -> 64)
     - 使用 BatchNorm 和 Dropout 防止過擬合
     - ReLU 激活函數
-    - 輸出層使用 Sigmoid
+    - 輸出層不使用 Sigmoid (配合 BCEWithLogitsLoss)
     """
 
     def __init__(self, input_dim, hidden_dims=[256, 128, 64], dropout_rate=0.3):
@@ -161,9 +161,8 @@ class AlertClassifierNet(nn.Module):
             layers.append(nn.Dropout(dropout_rate))
             prev_dim = hidden_dim
 
-        # 輸出層
+        # 輸出層 (不使用 Sigmoid，因為 BCEWithLogitsLoss 內建)
         layers.append(nn.Linear(prev_dim, 1))
-        layers.append(nn.Sigmoid())
 
         self.network = nn.Sequential(*layers)
 
@@ -314,7 +313,8 @@ def train_model(
                 optimizer.step()
 
             train_loss += loss.item()
-            predictions = (outputs > 0.5).float()
+            # 使用 sigmoid 將 logits 轉為機率，再進行閾值判斷
+            predictions = (torch.sigmoid(outputs) > 0.5).float()
             train_preds.extend(predictions.detach().cpu().numpy())
             train_labels.extend(y_batch.cpu().numpy())
 
@@ -338,7 +338,8 @@ def train_model(
                     loss = criterion(outputs, y_batch)
 
                 val_loss += loss.item()
-                predictions = (outputs > 0.5).float()
+                # 使用 sigmoid 將 logits 轉為機率，再進行閾值判斷
+                predictions = (torch.sigmoid(outputs) > 0.5).float()
                 val_preds.extend(predictions.cpu().numpy())
                 val_labels.extend(y_batch.cpu().numpy())
 
@@ -401,7 +402,8 @@ def predict(model, X_test, device="cpu", batch_size=256):
         for (X_batch,) in test_loader:
             X_batch = X_batch.to(device)
             outputs = model(X_batch)
-            preds = (outputs > 0.5).float()
+            # 使用 sigmoid 將 logits 轉為機率，再進行閾值判斷
+            preds = (torch.sigmoid(outputs) > 0.5).float()
             predictions.extend(preds.cpu().numpy())
 
     return np.array(predictions, dtype=int)
@@ -495,9 +497,9 @@ if __name__ == "__main__":
     )
 
     # 6. 設定損失函數和優化器
-    # 使用加權損失函數處理類別不平衡
-    pos_weight = torch.tensor([len(y_train) / (y_train.sum() + 1)])
-    criterion = nn.BCELoss()  # 如果使用 SMOTE，類別已經平衡
+    # 使用 BCEWithLogitsLoss (結合 Sigmoid + BCE，對 AMP 安全)
+    # 如果使用 SMOTE，類別已經平衡，不需要 pos_weight
+    criterion = nn.BCEWithLogitsLoss()
     optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
 
     # 7. 訓練模型
