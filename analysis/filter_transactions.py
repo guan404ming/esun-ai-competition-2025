@@ -26,9 +26,11 @@ def filter_transactions_before_alert(
 
     # Merge with from_acct
     df_merged_from = pd.merge(df_txn, df_alert_from, on="from_acct", how="inner")
+    df_merged_from["alert_acct"] = df_merged_from["from_acct"]
 
     # Merge with to_acct
     df_merged_to = pd.merge(df_txn, df_alert_to, on="to_acct", how="inner")
+    df_merged_to["alert_acct"] = df_merged_to["to_acct"]
 
     # Concatenate the two merged dataframes
     df_combined = pd.concat([df_merged_from, df_merged_to], ignore_index=True)
